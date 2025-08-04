@@ -1,0 +1,8 @@
+# Ignore node_modules (huge folder you don't need to push)
+node_modules/
+
+# Ignore environment variables like your bot token
+.env
+
+# Ignore log files
+*.log
