@@ -1,8 +1,5 @@
-# Ignore node_modules (huge folder you don't need to push)
+# Node modules and environment variables
 node_modules/
-
-# Ignore environment variables like your bot token
 .env
-
-# Ignore log files
+.DS_Store
 *.log
