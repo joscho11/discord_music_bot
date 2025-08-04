@@ -1,71 +1,61 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, getVoiceConnection } = require('@discordjs/voice');
-const play = require('play-dl');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
+const playdl = require('play-dl');
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
 });
 
-const PREFIX = '!';
-
-client.on('ready', () => {
-  console.log(`Logged in as ${client.user.tag}!`);
+client.once('ready', () => {
+    console.log(`🤖 Logged in as ${client.user.tag}`);
 });
 
-client.on('messageCreate', async (message) => {
-  if (!message.guild || message.author.bot) return;
-  if (!message.content.startsWith(PREFIX)) return;
+client.on('messageCreate', async message => {
+    if (!message.content.startsWith('!play') || message.author.bot) return;
 
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const command = args.shift().toLowerCase();
-
-  if (command === 'play') {
-    const voiceChannel = message.member.voice.channel;
-    if (!voiceChannel) return message.reply("You need to be in a voice channel!");
-
+    const args = message.content.split(' ').slice(1);
     const query = args.join(' ');
-    if (!query) return message.reply("Please provide a song name or YouTube link!");
+    if (!query) return message.reply('❗ Provide a song name or URL.');
+
+    const voiceChannel = message.member.voice.channel;
+    if (!voiceChannel) return message.reply('❗ Join a voice channel first.');
 
     try {
-      const stream = await play.stream(query);
-      const resource = createAudioResource(stream.stream, { inputType: stream.type });
+        // Search and stream
+        let songInfo = await playdl.search(query, { limit: 1 });
+        if (!songInfo.length) return message.reply('❌ No results found.');
 
-      const connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: message.guild.id,
-        adapterCreator: message.guild.voiceAdapterCreator,
-      });
+        const stream = await playdl.stream(songInfo[0].url);
 
-      const player = createAudioPlayer();
-      player.play(resource);
-      connection.subscribe(player);
+        const connection = joinVoiceChannel({
+            channelId: voiceChannel.id,
+            guildId: message.guild.id,
+            adapterCreator: message.guild.voiceAdapterCreator
+        });
 
-      player.on(AudioPlayerStatus.Idle, () => {
-        connection.destroy();
-      });
+        const player = createAudioPlayer();
+        const resource = createAudioResource(stream.stream, {
+            inputType: stream.type
+        });
 
-      message.reply(`Now playing: ${query}`);
-    } catch (error) {
-      console.error(error);
-      message.reply("Error playing that song.");
+        player.play(resource);
+        connection.subscribe(player);
+
+        player.on(AudioPlayerStatus.Idle, () => {
+            connection.destroy();
+        });
+
+        message.reply(`🎶 Now playing: **${songInfo[0].title}**`);
+    } catch (err) {
+        console.error("⚠️ Error:", err);
+        message.reply('❌ Error playing that song.');
     }
-  }
-
-  if (command === 'stop') {
-    const connection = getVoiceConnection(message.guild.id);
-    if (connection) {
-      connection.destroy();
-      message.reply('Music stopped and disconnected.');
-    } else {
-      message.reply("I'm not connected to a voice channel.");
-    }
-  }
 });
 
 client.login(process.env.DISCORD_TOKEN);
