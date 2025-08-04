@@ -1,61 +1,63 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
 const playdl = require('play-dl');
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
 client.once('ready', () => {
-    console.log(`🤖 Logged in as ${client.user.tag}`);
+  console.log(`🤖 Logged in as ${client.user.tag}`);
 });
 
 client.on('messageCreate', async message => {
-    if (!message.content.startsWith('!play') || message.author.bot) return;
+  if (!message.content.startsWith('!play') || message.author.bot) return;
 
-    const args = message.content.split(' ').slice(1);
-    const query = args.join(' ');
-    if (!query) return message.reply('❗ Provide a song name or URL.');
+  const input = message.content.split(' ').slice(1).join(' ');
+  if (!input) return message.reply('❗ Please provide a song name or YouTube URL.');
 
-    const voiceChannel = message.member.voice.channel;
-    if (!voiceChannel) return message.reply('❗ Join a voice channel first.');
+  const voiceChannel = message.member.voice.channel;
+  if (!voiceChannel) return message.reply('❗ You need to join a voice channel first.');
 
-    try {
-        // Search and stream
-        let songInfo = await playdl.search(query, { limit: 1 });
-        if (!songInfo.length) return message.reply('❌ No results found.');
+  try {
+    let songUrl;
 
-        const stream = await playdl.stream(songInfo[0].url);
+    if (playdl.validate(input)) {
+      // Input is a valid URL
+      songUrl = input;
+    } else {
+      // Search for the song on YouTube
+      const results = await playdl.search(input, { limit: 1 });
+      if (!results.length) return message.reply('❌ No results found for that song.');
 
-        const connection = joinVoiceChannel({
-            channelId: voiceChannel.id,
-            guildId: message.guild.id,
-            adapterCreator: message.guild.voiceAdapterCreator
-        });
-
-        const player = createAudioPlayer();
-        const resource = createAudioResource(stream.stream, {
-            inputType: stream.type
-        });
-
-        player.play(resource);
-        connection.subscribe(player);
-
-        player.on(AudioPlayerStatus.Idle, () => {
-            connection.destroy();
-        });
-
-        message.reply(`🎶 Now playing: **${songInfo[0].title}**`);
-    } catch (err) {
-        console.error("⚠️ Error:", err);
-        message.reply('❌ Error playing that song.');
+      songUrl = results[0].url;
     }
+
+    const stream = await playdl.stream(songUrl);
+
+    const connection = joinVoiceChannel({
+      channelId: voiceChannel.id,
+      guildId: message.guild.id,
+      adapterCreator: message.guild.voiceAdapterCreator
+    });
+
+    const player = createAudioPlayer();
+    const resource = createAudioResource(stream.stream, { inputType: stream.type });
+
+    player.play(resource);
+    connection.subscribe(player);
+
+    message.reply(`🎶 Now playing: **${songUrl}**`);
+  } catch (error) {
+    console.error('Error playing song:', error);
+    message.reply('❌ Error playing that song.');
+  }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.TOKEN);
